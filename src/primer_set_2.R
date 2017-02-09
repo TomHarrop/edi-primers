@@ -1,12 +1,41 @@
 library(data.table)
 
-bof <- fread("data/primers_2017-02-08.csv")
+# duplicate gene resolver
+ResolveDuplicateGenes <- function(gene_id, transcipts_dt){
+    
+    my_dt <- copy(transcripts_dt)
+    
+    # remove NA transcripts for gene_id
+    my_dt <- my_dt[!(gene == gene_id & is.na(transcript))]
+    
+    # find XM or NM transcripts
+    my_transcripts <- my_dt[gene == gene_id, unique(transcript)]
+    xm_tx <- grep("^XM", my_transcripts, value = TRUE)
+    nm_tx <- grep("^NM", my_transcripts, value = TRUE)
+    
+    # prefer XM
+    if (length(xm_tx > 0) & length(nm_tx > 0)) {
+        return(my_dt[!transcript %in% nm_tx])
+    }
+    
+    # otherwise we will have to search for primers for all transcripts :(
+    my_dt
+}
+
+# read data
+primer_list <- fread("data/primers_2017-02-08.csv")
+outdir <- paste("output", Sys.Date(), sep = "/")
+if (!dir.exists(outdir)) {
+    dir.create(outdir)
+}
 
 # get an exhaustive list of RAP IDs
-refseq_list <- oryzr::LocToRefSeq(bof[, unique(gene)])
+refseq_list <- oryzr::LocToRefSeq(primer_list[, unique(gene)])
 refseq_results <- rbindlist(refseq_list, idcol = FALSE)
 refseq_results[is.na(ensembl_gene_id) | ensembl_gene_id == "",
                ensembl_gene_id := NA]
+refseq_results[is.na(refseq_mrna) | refseq_mrna == "",
+               refseq_mrna := NA]
 tigr_to_rap_biomart <- refseq_results[,.(
     ensembl_gene_id = unlist(strsplit(ensembl_gene_id, "/", fixed = TRUE))),
     by = tigrId]
@@ -19,14 +48,14 @@ all_raps <- unique(merge(tigr_to_rap_biomart[!is.na(ensembl_gene_id)],
                          all = TRUE))
 
 all_raps[, write.table(unique(ensembl_gene_id),
-                       file = "test/rap_ids.csv",
+                       file = paste(outdir, "rap_ids.csv", sep = "/"),
                        sep = ",",
                        quote = FALSE,
                        na = "",
                        row.names = FALSE, col.names = FALSE)]
 
-
 # now run rap_to_ncbi.py
+# should make this callable from R with a tmp file
 
 # read the results back in
 rap_to_gi <- fread("test/rap_to_gi.csv")
@@ -50,5 +79,24 @@ all_genes_with_tx <- merge(all_raps, both_tx,
 setkey(all_genes_with_tx, gene, transcript)
 unique(all_genes_with_tx)
 
-# now find missing transcripts, neaten table and run primer design
+# find missing transcripts from original oryzr search
+all_genes_with_tx[is.na(transcript),
+                  transcript := refseq_results[tigrId == gene, refseq_mrna],
+                  by = gene]
+
+# remove duplicate rows
+unique_transcripts <- all_genes_with_tx[!duplicated(
+    all_genes_with_tx, by = c("gene", "transcript"))]
+
+
+# write output
+unique_transcripts[!is.na(transcript),
+                   write.table(unique(transcript),
+                               file = paste(outdir, "refseq.txt",
+                                            sep = "/"),
+                               sep = ",",
+                               quote = FALSE,
+                               na = "",
+                               row.names = FALSE, col.names = FALSE))]
+
 

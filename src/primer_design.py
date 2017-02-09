@@ -5,7 +5,7 @@
 # DEPENDENCIES #
 ################
 
-import rt_primer_design.__init__
+import rt_primer_design
 import sys
 import os
 
@@ -56,7 +56,7 @@ max_jobs = int(wait_seconds/3)
 sys.setrecursionlimit(10000)
 
 # tell NCBI who we are
-my_email = 'tom.harrop@otago.ac.nz'
+my_email = MY_EMAIL_ADDRESS
 strict_parameters['EMAIL'] = my_email
 
 # load the list of refseq IDs
