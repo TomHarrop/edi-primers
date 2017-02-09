@@ -1,47 +1,82 @@
 #!/usr/bin/env python3
 
 import csv
+import re
 from Bio import Entrez
-from Bio import SeqIO
 
 rap_id_file = 'test/rap_ids.csv'
 Entrez.email = my_email_address
 
-# get entrez GI for a RAP ID
-def get_gi(rap_id):
-    term = rap_id
-    handle = Entrez.esearch(db='nuccore', term=term)
-    record = Entrez.read(handle)
-    gi_list = record['IdList']
-    return(gi_list)
+#############
+# FUNCTIONS #
+#############
 
-# get genbank record from GI
-def get_gb_records(gi_list):
+# get the GIs from RAP
+def get_gis_from_rap(rap):
+    handle = Entrez.esearch(
+        db='gene',
+        term=rap + ' AND txid39947[ORGN]')
+    record = Entrez.read(handle)
+    return(record['IdList'])
+
+
+# download the record for a gi
+def download_gi_record(gi):
     handle = Entrez.efetch(
-        db='nuccore',
-        id=gi_list,
-        rettype='gb',
-        retmode='text')
-    return(SeqIO.parse(handle, 'gb'))
+        db='gene',
+        id=gi,
+        retmode='xml')
+    return(handle.read())
+
+
+# parse the XM
+def parse_xm_from_record(record):
+    xm_search = re.compile(r'XM_\d+')
+    if xm_search.search(record):
+        return(xm_search.search(record).group(0))
+
+# parse the NM
+def parse_nm_from_record(record):
+    nm_search = re.compile(r'NM_\d+')
+    if nm_search.search(record):
+        return(nm_search.search(record).group(0))
+
+
+# csv function
+def write_dict_to_csv(result_list, file_name):
+    with open(file_name, 'w') as csvfile:
+        headers = result_list[0].keys()
+        dict_writer = csv.DictWriter(csvfile, fieldnames=headers)
+        dict_writer.writeheader()
+        dict_writer.writerows(result_list)
+
+
+########
+# CODE # 
+########
 
 # read RAP ID from file
-loc_to_rap = {}
 with open(rap_id_file, 'r') as f:
     csvreader = csv.reader(f)
-    for line in csvreader:
-        loc_to_rap[line[0]] = line[1]
+    rap_ids = [x[0] for x in csvreader]
 
-# search entrez for gene ID
-test_gis = get_gi('OS01G0848400')
+rap_to_gi_list = []
+for rap in rap_ids:
+    gi_list = get_gis_from_rap(rap)
+    for gi in gi_list:
+        rap_to_gi_list.append({'rap': rap, 'gi': gi})
+    
+# get XMs and NMs for each gi
+gi_list = [x['gi'] for x in rap_to_gi_list]
+gi_to_nm = []
+gi_to_xm = []
+for gi in gi_list:
+    record = download_gi_record(gi)
+    gi_to_xm.append({'gi': gi, 'transcript': parse_xm_from_record(record)})
+    gi_to_nm.append({'gi': gi, 'transcript': parse_nm_from_record(record)})
 
-test_handle = Entrez.efetch(
-    db='nuccore',
-    id=test_gis[0],
-    rettype='gb',
-    retmode='text')
-
-
-
-test_gbk = get_gb_records(test_gis)
-
+# write to csv
+write_dict_to_csv(rap_to_gi_list, 'test/rap_to_gi.csv')
+write_dict_to_csv(gi_to_nm, 'test/gi_to_nm.csv')
+write_dict_to_csv(gi_to_xm, 'test/gi_to_xm.csv')
 
