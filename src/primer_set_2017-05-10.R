@@ -23,7 +23,9 @@ ResolveDuplicateGenes <- function(gene_id, transcipts_dt){
 }
 
 # read data
-primer_list <- fread("data/primers_2017-02-08.csv")
+primer_list <- fread("data/primers_2017-05-10.csv",
+                     header = FALSE,
+                     col.names = "gene")
 outdir <- paste("output", Sys.Date(), sep = "/")
 if (!dir.exists(outdir)) {
     dir.create(outdir)
@@ -54,7 +56,7 @@ all_raps[, write.table(unique(ensembl_gene_id),
                        na = "",
                        row.names = FALSE, col.names = FALSE)]
 
-# now run rap_to_ncbi.py
+# now run rap_to_transcript.py
 # should make this callable from R with a tmp file
 
 # read the results back in
@@ -114,9 +116,9 @@ setnames(gene_primers, "ensembl_gene_id", "rap_id")
 
 write.csv(
     gene_primers[!duplicated(gene_primers, by = c("gene", "symbol", "gi"))],
-          file = "output/2017-02-10/annotated_primers.csv",
-          quote = FALSE,
-          na = "",
-          row.names = FALSE)
+    file = "output/2017-02-10/annotated_primers.csv",
+    quote = FALSE,
+    na = "",
+    row.names = FALSE)
 
 

@@ -56,36 +56,57 @@ max_jobs = int(wait_seconds/3)
 sys.setrecursionlimit(10000)
 
 # tell NCBI who we are
-my_email = MY_EMAIL_ADDRESS
 strict_parameters['EMAIL'] = my_email
 
 # load the list of refseq IDs
 with open('data/refseq.txt', 'r') as file:
     refseq_list = [x.strip() for x in file.readlines()]
+with open('output/2017-02-10/refseq.txt', 'r') as file:
+    refseq_list = [x.strip() for x in file.readlines()]
 
-# run the blast jobs
+# run the blast jobs in parallel
 refseq_blast_results = rt_primer_design.multiple_primer_blast(
     ref_seq_list=refseq_list,
     starting_parameters=strict_parameters,
     wait_seconds=60,
     n_jobs=max_jobs)
 
+# ***DON'T DO BOTH***
+# IF that doesn't work, try running them in serial with three retries
+# sometimes primer-BLAST fails for no apparent reason
+refseq_blast_results = []
+for rs in refseq_list:
+    attempt = 0
+    while attempt < 3:
+        attempt += 1
+        try:
+            print("%s attempt %i" % (rs, attempt))
+            result = rt_primer_design.iterate_primer_blast(
+                ref_seq=rs,
+                starting_parameters=strict_parameters,
+                verbose=True)
+            refseq_blast_results.append(result)
+            attempt = 3
+        except Exception as e:
+            print("%s attempt %i FAILED" % (rs, attempt))
+
+
 # NM_001050201 has multiple similar seqs, test?
 
 # write output
-if not os.path.isdir('output'):
-    os.mkdir('output')
-if not os.path.isdir('output/html'):
-    os.mkdir('output/html')
+if not os.path.isdir('output/2017-02-10'):
+    os.mkdir('output/2017-02-10')
+if not os.path.isdir('output/2017-02-10/html'):
+    os.mkdir('output/2017-02-10/html')
 
 
-with open('output/primers.csv', 'w') as file:
+with open('output/2017-02-10/primers.csv', 'w') as file:
     file.write('ref_seq,status,F,TM_F,R,TM_R,product_size,intron_size\n')
     for line in [x.csv_line() for x in refseq_blast_results]:
         file.write(line + '\n')
 
 for primerset in refseq_blast_results:
-    primerset.print_file(output_subdirectory='output/html')
+    primerset.print_file(output_subdirectory='output/2017-02-10/html')
 
 html_header = """
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" \n
@@ -102,7 +123,7 @@ html_header = """
 
 html_footer = '\n</p>\n</body>\n</html>'
 
-with open('output/html/links.html', 'w') as file:
+with open('output/2017-02-10/html/links.html', 'w') as file:
     file.write(html_header)
     for primer_set in refseq_blast_results:
         result_link = (
